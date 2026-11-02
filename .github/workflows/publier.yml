@@ -63,8 +63,8 @@ jobs:
           @font-face { font-family: "LM"; src: url("fonts/lmroman10-italic.otf"); font-style: italic; }
           @font-face { font-family: "LM"; src: url("fonts/lmroman10-bold.otf"); font-weight: bold; }
           @font-face { font-family: "LM"; src: url("fonts/lmroman10-bolditalic.otf"); font-weight: bold; font-style: italic; }
-          html { font-size: 18px; background: #fff; }
-          body { font-family: "LM", Georgia, serif; line-height: 1.55; color: #111; background: #fff;
+          html { font-size: 16px; background: #fff; }
+          body { font-family: "LM", Georgia, serif; line-height: 1.4; color: #111; background: #fff;
                  max-width: 48rem; margin: 0 auto; padding: 0 16px 4rem; }
           a { color: #000; text-underline-offset: 0.18em; }
           img { max-width: 100%; height: auto; }
