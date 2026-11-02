@@ -1,0 +1,139 @@
+# Fichier de publication commun à tous les projets Overleaf du site.
+# À placer dans chaque dépôt GitHub, sous : .github/workflows/publier.yml
+#
+# À chaque envoi depuis Overleaf, il convertit le LaTeX en page web et la publie.
+# Dans le projet d'accueil (celui qui contient menu.txt), il publie en plus
+# le style, la police et le menu partagés par toutes les pages.
+name: Publier la page web
+
+on:
+  push:
+    branches: [main, master]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Récupérer le projet Overleaf
+        uses: actions/checkout@v4
+
+      - name: Installer Pandoc et la police Latin Modern
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq pandoc fonts-lmodern
+
+      - name: Construire la page web
+        run: |
+          # Fichier LaTeX principal : main.tex, sinon le premier fichier avec \documentclass
+          if [ -f main.tex ]; then TEX=main.tex; else TEX=$(grep -l '\\documentclass' *.tex | head -n 1); fi
+          echo "Fichier principal : $TEX"
+          mkdir -p _site
+
+          # Images utilisées dans le document (PNG, JPG, SVG, GIF)
+          find . -path ./_site -prune -o -type f \( -iname '*.png' -o -iname '*.jpg' -o -iname '*.jpeg' -o -iname '*.svg' -o -iname '*.gif' \) -print \
+            | while read -r f; do mkdir -p "_site/$(dirname "$f")"; cp "$f" "_site/$f"; done
+
+          cat > entete.html <<'EOF'
+          <nav class="barre" id="menu"><a class="nom" href="/">Victor De Bono</a><span class="liens"></span></nav>
+          EOF
+          cat > tete.html <<'EOF'
+          <link rel="stylesheet" href="/commun/style.css">
+          <script src="/commun/menu.js" defer></script>
+          EOF
+
+          pandoc "$TEX" -f latex -t html5 -s --mathjax -V lang=fr \
+            --include-in-header tete.html --include-before-body entete.html -o _site/index.html
+
+          # ---------- Éléments partagés : seulement dans le projet d'accueil ----------
+          if [ -f menu.txt ]; then
+            cp menu.txt _site/menu.txt
+            mkdir -p _site/commun/fonts
+            cp /usr/share/texmf/fonts/opentype/public/lm/lmroman10-{regular,italic,bold,bolditalic}.otf _site/commun/fonts/
+
+            cat > _site/commun/style.css <<'EOF'
+          @font-face { font-family: "LM"; src: url("fonts/lmroman10-regular.otf"); }
+          @font-face { font-family: "LM"; src: url("fonts/lmroman10-italic.otf"); font-style: italic; }
+          @font-face { font-family: "LM"; src: url("fonts/lmroman10-bold.otf"); font-weight: bold; }
+          @font-face { font-family: "LM"; src: url("fonts/lmroman10-bolditalic.otf"); font-weight: bold; font-style: italic; }
+          html { font-size: 18px; background: #fff; }
+          body { font-family: "LM", Georgia, serif; line-height: 1.55; color: #111; background: #fff;
+                 max-width: 48rem; margin: 0 auto; padding: 0 16px 4rem; }
+          a { color: #000; text-underline-offset: 0.18em; }
+          img { max-width: 100%; height: auto; }
+          header#title-block-header { display: none; }
+          .barre { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline;
+                   gap: .5rem 1.5rem; border-bottom: 1px solid #000; padding: 1rem 0 .6rem; margin-bottom: 2rem;
+                   min-height: 1.6rem; }
+          .barre a { text-decoration: none; }
+          .barre .nom { font-size: 1.25rem; }
+          .barre .liens a { margin-left: 1.2rem; }
+          .barre .liens a.actif { border-bottom: 2px solid #000; }
+          .center { text-align: center; }
+          .center strong:first-child { font-size: 1.8rem; }
+          h1 { font-size: 1.35rem; border-bottom: 1px solid #000; padding-bottom: .25rem; margin-top: 2.2rem; }
+          h2 { font-size: 1.1rem; margin-top: 1.6rem; }
+          figure { margin: 1.5rem 0; text-align: center; }
+          figcaption { font-size: .9rem; }
+          dl { display: grid; grid-template-columns: 8rem 1fr; column-gap: 1rem; }
+          dt { font-weight: bold; font-size: .9rem; padding-top: .15rem; }
+          dd { margin: 0 0 .9rem; }
+          dd p { margin: 0; }
+          dd ul { margin: .3rem 0; padding-left: 1.1rem; }
+          @media (max-width: 576px) {
+            dl { display: block; }
+            dd { margin-left: 0; }
+            .barre .liens a { margin: 0 1.2rem 0 0; }
+          }
+          EOF
+
+            cat > _site/commun/menu.js <<'EOF'
+          // Remplit la barre de navigation à partir de /menu.txt (projet d'accueil)
+          (function () {
+            var cible = document.querySelector("#menu .liens");
+            if (!cible) return;
+            fetch("/menu.txt", { cache: "no-cache" })
+              .then(function (r) { return r.ok ? r.text() : ""; })
+              .then(function (texte) {
+                var ici = location.pathname;
+                texte.split(/\r?\n/).forEach(function (ligne) {
+                  ligne = ligne.trim();
+                  if (!ligne || ligne.charAt(0) === "%" || ligne.indexOf("|") < 0) return;
+                  var morceaux = ligne.split("|");
+                  var a = document.createElement("a");
+                  a.textContent = morceaux[0].trim();
+                  a.href = morceaux.slice(1).join("|").trim();
+                  var cheminLien = new URL(a.href, location.href).pathname;
+                  var actif = cheminLien === "/" ? (ici === "/" || ici === "/index.html")
+                                                 : ici.indexOf(cheminLien) === 0;
+                  if (actif) a.className = "actif";
+                  cible.appendChild(a);
+                });
+              })
+              .catch(function () {});
+          })();
+          EOF
+          fi
+
+      - name: Préparer la publication
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Publier sur GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
