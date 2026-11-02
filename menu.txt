@@ -1,0 +1,7 @@
+% Menu du site
+% Une ligne par lien, sous la forme :   Texte | /adresse/
+% L'adresse d'un projet est le nom de son dépôt GitHub entre deux « / ».
+% Les lignes qui commencent par % sont ignorées.
+
+Accueil | /
+CV | /cv/
